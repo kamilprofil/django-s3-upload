@@ -25,8 +25,22 @@ def create_upload_data(  # noqa: C901
     token: str | None = None,
 ) -> dict[str, Any]:
     """Generate AWS upload payload."""
-    access_key = settings.AWS_ACCESS_KEY_ID
-    secret_access_key = settings.AWS_SECRET_ACCESS_KEY
+    access_key = getattr(settings, "AWS_ACCESS_KEY_ID", None)
+    secret_access_key = getattr(settings, "AWS_SECRET_ACCESS_KEY", None)
+    token = token or getattr(settings, "AWS_SESSION_TOKEN", None)
+    # If credentials are missing, fetch from boto3 (IAM role, env, etc)
+    if not access_key or not secret_access_key:
+        import boto3
+        session = boto3.Session()
+        credentials = session.get_credentials()
+        if credentials:
+            frozen = credentials.get_frozen_credentials()
+            access_key = frozen.access_key
+            secret_access_key = frozen.secret_key
+            if frozen.token:
+                token = frozen.token
+    if not access_key or not secret_access_key:
+        raise RuntimeError("AWS credentials not found in settings or environment.")
     bucket = bucket or settings.AWS_STORAGE_BUCKET_NAME
     region = settings.S3UPLOAD_REGION
     bucket_url = get_bucket_endpoint_url(bucket, region)
